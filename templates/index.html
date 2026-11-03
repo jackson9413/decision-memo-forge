@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Memo Forge</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">DMF</span>
+    <div>
+      <h1>Decision Memo Forge</h1>
+      <p>Paste a decision document. Get a decision-readiness score, the findings that block a yes, and a rewrite scaffold.</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="pill pill-ghost" id="status-pill">idle</span>
+    <a class="btn btn-ghost" href="/api/health" target="_blank">health</a>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel panel-input">
+    <div class="panel-head">
+      <h2>Your document</h2>
+      <div class="row-gap">
+        <button class="btn btn-ghost" id="btn-clear">Clear</button>
+        <button class="btn btn-primary" id="btn-review">Review document</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label>
+        <span>Document type</span>
+        <select id="doc-type">
+          {% for dt in doc_types %}
+          <option value="{{ dt }}">{{ dt if dt != 'auto' else 'auto-detect' }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Stakes</span>
+        <select id="stakes">
+          {% for s in stakes %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Reversibility</span>
+        <select id="reversibility">
+          {% for r in reversibility %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Audience</span>
+        <select id="audience">
+          {% for a in audiences %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <textarea id="doc-text" spellcheck="false" placeholder="Paste your memo, RFC, proposal, one-pager, status update or postmortem here.
+
+Context
+...
+Decision
+...
+Options
+...
+Recommendation
+...
+Ask: ..."></textarea>
+
+    <div class="samples">
+      <h3>Load a sample</h3>
+      <div id="sample-list" class="sample-list"></div>
+    </div>
+  </section>
+
+  <section class="panel panel-result" id="results">
+    <div class="empty-state" id="empty-state">
+      <h2>Nothing reviewed yet</h2>
+      <p>Paste a decision document on the left and press <strong>Review document</strong>, or load one of the built-in samples.</p>
+      <ul>
+        <li>Scores five axes: clarity, specificity, structure, decisiveness, actionability.</li>
+        <li>Flags the gaps that turn a memo into a meeting: no decision, no options, no ask.</li>
+        <li>Catches an unbalanced options comparison before a reviewer does.</li>
+        <li>Runs entirely on this machine. No API keys, no uploads.</li>
+      </ul>
+    </div>
+
+    <div id="report" hidden>
+      <div class="score-head">
+        <div class="score-main">
+          <div class="score-num" id="score-num">0</div>
+          <div class="score-meta">
+            <span class="verdict-pill" id="verdict-pill">-</span>
+            <p id="verdict-blurb"></p>
+          </div>
+        </div>
+        <div class="score-side">
+          <div class="kv"><span>Document type</span><strong id="m-type">-</strong></div>
+          <div class="kv"><span>Words</span><strong id="m-words">-</strong></div>
+          <div class="kv"><span>Findings</span><strong id="m-findings">-</strong></div>
+          <div class="kv"><span>Options</span><strong id="m-options">-</strong></div>
+        </div>
+      </div>
+
+      <div class="axis-row" id="axis-row"></div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="findings">Findings</button>
+        <button class="tab" data-tab="coverage">Coverage</button>
+        <button class="tab" data-tab="options">Options</button>
+        <button class="tab" data-tab="plan">Fix plan</button>
+        <button class="tab" data-tab="strengths">Strengths</button>
+      </div>
+
+      <div class="tab-body" id="tab-findings">
+        <div class="filter-row" id="finding-filters">
+          <button class="chip active" data-sev="all">all</button>
+          <button class="chip" data-sev="high">high</button>
+          <button class="chip" data-sev="medium">medium</button>
+          <button class="chip" data-sev="low">low</button>
+          <span class="spacer"></span>
+          <select id="axis-filter">
+            <option value="all">every axis</option>
+            <option value="clarity">clarity</option>
+            <option value="specificity">specificity</option>
+            <option value="structure">structure</option>
+            <option value="decisiveness">decisiveness</option>
+            <option value="actionability">actionability</option>
+          </select>
+        </div>
+        <div id="findings-list"></div>
+      </div>
+
+      <div class="tab-body" id="tab-coverage" hidden>
+        <div id="coverage-list"></div>
+        <div id="caps-list"></div>
+      </div>
+
+      <div class="tab-body" id="tab-options" hidden>
+        <div id="options-list"></div>
+      </div>
+
+      <div class="tab-body" id="tab-plan" hidden>
+        <div id="plan-list"></div>
+        <div class="scaffold" id="scaffold-box"></div>
+      </div>
+
+      <div class="tab-body" id="tab-strengths" hidden>
+        <div id="strengths-list"></div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-ghost" id="btn-save">Save review</button>
+        <span class="muted" id="save-status"></span>
+        <span class="spacer"></span>
+        <a class="btn btn-ghost" id="btn-md" download>Download markdown</a>
+        <a class="btn btn-ghost" id="btn-json" download>Download JSON</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<section class="panel panel-history">
+  <div class="panel-head">
+    <h2>Review log</h2>
+    <span class="muted" id="history-count"></span>
+  </div>
+  <div id="history-list" class="history-list"></div>
+</section>
+
+<footer class="foot">
+  Local-first. Standard library analysis engine, SQLite session log, no network calls and no API keys.
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
